@@ -2,6 +2,7 @@
 #include <linux/module.h>
 #include <linux/rtc.h>
 #include <linux/platform_device.h>
+#include <linux/time.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivan Bornyakov");
@@ -10,7 +11,12 @@ static struct platform_device *pdev = NULL;
 
 static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 {
-	return 0;
+	struct timeval now;
+
+	do_gettimeofday(&now);
+	rtc_time_to_tm(now.tv_sec, tm);
+
+	return rtc_valid_tm(tm);
 }
 
 static int syntacore_set_time(struct device *dev, struct rtc_time *tm)
