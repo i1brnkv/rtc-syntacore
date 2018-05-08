@@ -3,12 +3,38 @@
 #include <linux/rtc.h>
 #include <linux/platform_device.h>
 #include <linux/time.h>
+#include <linux/proc_fs.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivan Bornyakov");
 
 static struct platform_device *pdev = NULL;
 static long int time_offset = 0;
+/* directory in /proc */
+static struct proc_dir_entry *proc_dir = NULL;
+/* file in /proc to store time speed */
+static struct proc_dir_entry *proc_spd = NULL;
+
+static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
+			     loff_t *offset)
+{
+	printk("SYNTACORE RTC proc read\n");
+
+	return 0;
+}
+
+static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
+			      loff_t *offset)
+{
+	printk("SYNTACORE RTC proc write\n");
+
+	return len;
+}
+
+static struct file_operations spd_proc_fops = {
+	.read  = proc_read_spd,
+	.write = proc_write_spd,
+};
 
 static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 {
@@ -68,6 +94,17 @@ static int __init syntacore_init(void)
 {
 	int err;
 
+	proc_dir = proc_mkdir("rtc-syntacode", NULL);
+	if (proc_dir == NULL)
+		return -ENOMEM;
+
+	proc_spd = proc_create("speed", 0, proc_dir, &spd_proc_fops);
+	if (proc_spd == NULL) {
+		proc_remove(proc_dir);
+
+		return -ENOMEM;
+	}
+
 	err = platform_driver_register(&syntacore_driver);
 	if (err)
 		return err;
@@ -94,7 +131,10 @@ static void __exit syntacore_exit(void)
 {
 	platform_device_unregister(pdev);
 	platform_driver_unregister(&syntacore_driver);
+	proc_remove(proc_spd);
+	proc_remove(proc_dir);
 }
+
 
 module_init(syntacore_init);
 module_exit(syntacore_exit);
