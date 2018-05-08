@@ -14,11 +14,48 @@ static long int time_offset = 0;
 static struct proc_dir_entry *proc_dir = NULL;
 /* file in /proc to store time speed */
 static struct proc_dir_entry *proc_spd = NULL;
+/* time speed coeffitient */
+/* since floating in kernel is BAD, split coeffitient into integer part and */
+/* fractional part (6 digits) */
+static unsigned int time_speed_int = 1;
+static unsigned int time_speed_frac = 0;
+static char msg[80] = { 0 };
 
 static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 			     loff_t *offset)
 {
-	printk("SYNTACORE RTC proc read\n");
+	int err_count = 0;
+
+	int msg_len = snprintf(msg, sizeof(msg), "%u.%u\n", time_speed_int,
+							  time_speed_frac);
+	if ((msg_len + 1) > sizeof(msg)) {
+		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coeffitient of length %d\n",
+				sizeof(msg), msg_len);
+
+		return -EFAULT;
+	}
+
+	/* reading position is behind the end of string to show */
+	if (*offset >= msg_len)
+		return 0;
+
+	/* reading position is good, but overall length stands */
+	/* outside the end of string to show, so truncate the length */
+	if (*offset + len > msg_len)
+		len = msg_len - *offset;
+
+	err_count = copy_to_user(buff, msg + *offset, len);
+	if (err_count == 0) {
+		/* update reading position */
+		*offset += len;
+
+		return len;
+	} else {
+		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
+				err_count);
+
+		return -EFAULT;
+	}
 
 	return 0;
 }
