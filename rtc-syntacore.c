@@ -63,9 +63,42 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			      loff_t *offset)
 {
-	printk("SYNTACORE RTC proc write\n");
+	int err_count = 0;
 
-	return len;
+	/* fill msg with current speed value */
+	int msg_len = snprintf(msg, sizeof(msg), "%u.%u\n", time_speed_int,
+							  time_speed_frac);
+	if ((msg_len + 1) > sizeof(msg)) {
+		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coeffitient of length %d\n",
+				sizeof(msg), msg_len);
+
+		return -EFAULT;
+
+	}
+
+	/* writing position is behind the end of string to write */
+	if (*offset >= msg_len)
+		return 0;
+
+	/* writing position is good, but overall length stands outside */
+	/* the end of buffer to store the value, so truncate the length */
+	if (*offset + len > sizeof(msg))
+		len = sizeof(msg) - *offset;
+
+	err_count = copy_from_user(msg + *offset, buff, len);
+	if (err_count == 0) {
+		/* update writing position */
+		*offset += len;
+
+		sscanf(msg, "%u.%u", &time_speed_int, &time_speed_frac);
+
+		return len;
+	} else {
+		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
+				err_count);
+
+		return -EFAULT;
+	}
 }
 
 static struct file_operations spd_proc_fops = {
