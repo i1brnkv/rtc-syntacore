@@ -64,33 +64,48 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			      loff_t *offset)
 {
 	int err_count = 0;
+	char *msg_tmp, *speed_match;
+	int tmp_speed_int = 0, tmp_speed_frac = 0;
 
-	/* fill msg with current speed value */
-	int msg_len = snprintf(msg, sizeof(msg), "%u.%u\n", time_speed_int,
-							  time_speed_frac);
-	if ((msg_len + 1) > sizeof(msg)) {
-		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coeffitient of length %d\n",
-				sizeof(msg), msg_len);
+	/* clear msg before writing to it */
+	memset(msg, 0, sizeof(msg));
 
-		return -EFAULT;
+	/* if user wants to write insane length, truncate it */
+	if (len > (sizeof(msg) - 1))
+		len = sizeof(msg) - 1;
 
-	}
-
-	/* writing position is behind the end of string to write */
-	if (*offset >= msg_len)
-		return 0;
-
-	/* writing position is good, but overall length stands outside */
-	/* the end of buffer to store the value, so truncate the length */
-	if (*offset + len > sizeof(msg))
-		len = sizeof(msg) - *offset;
-
-	err_count = copy_from_user(msg + *offset, buff, len);
+	err_count = copy_from_user(msg, buff, len);
 	if (err_count == 0) {
-		/* update writing position */
-		*offset += len;
+		/* copy msg string to use strsep() on it */
+		msg_tmp = kzalloc(strlen(msg) + 1, GFP_KERNEL);
+		if (!msg_tmp)
+			return -ENOMEM;
+		strcpy(msg_tmp, msg);
 
-		sscanf(msg, "%u.%u", &time_speed_int, &time_speed_frac);
+		speed_match = strsep(&msg_tmp, ".");
+		err_count = kstrtouint(speed_match, 10, &tmp_speed_int);
+		if (err_count) {
+			kfree(msg_tmp);
+
+			return err_count;
+		}
+
+		/* if strsep() above finds ".", msg_tmp will point to fractional
+		 * part, otherwise NULL */
+		if (msg_tmp) {
+			err_count = kstrtouint(msg_tmp, 10, &tmp_speed_frac);
+			if (err_count) {
+				kfree(msg_tmp);
+
+				return err_count;
+			}
+		}
+
+		/* update time speed coeffitient */
+		time_speed_int  = tmp_speed_int;
+		time_speed_frac = tmp_speed_frac;
+
+		kfree(msg_tmp);
 
 		return len;
 	} else {
