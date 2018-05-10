@@ -14,9 +14,9 @@ static long int time_offset = 0;
 static struct proc_dir_entry *proc_dir = NULL;
 /* file in /proc to store time speed */
 static struct proc_dir_entry *proc_spd = NULL;
-/* time speed coeffitient */
-/* since floating in kernel is BAD, store coeffitient times 1000000,
- * last 6 digits will be fractional part */
+/* time speed coeffitient
+ * Since floating in kernel is BAD, store coeffitient multiplied
+ * by 1000000, last 6 digits will be fractional part. */
 static unsigned long int time_mega_speed = 1000000;
 static char msg[80] = { 0 };
 
@@ -38,8 +38,8 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 	if (*offset >= msg_len)
 		return 0;
 
-	/* reading position is good, but overall length stands */
-	/* outside the end of string to show, so truncate the length */
+	/* reading position is good, but overall length stands
+	 * outside the end of string to show, so truncate the length */
 	if (*offset + len > msg_len)
 		len = msg_len - *offset;
 
@@ -97,8 +97,8 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		speed_match = strsep(&msg_tmp, ".");
 		strcat(mega_speed, speed_match);
 
-		/* if strsep() above finds ".", msg_tmp will point to fractional
-		 * part, otherwise NULL */
+		/* if strsep() above finds ".", msg_tmp will point to
+		 * fractional part, otherwise NULL */
 		if (msg_tmp) {
 			if (strlen(msg_tmp) > 6)
 				strncat(mega_speed, msg_tmp, 6);
