@@ -85,7 +85,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		speed_match = strsep(&msg_tmp, ".");
 		err_count = kstrtouint(speed_match, 10, &tmp_speed_int);
 		if (err_count) {
-			kfree(msg_tmp);
+			kfree(speed_match);
 
 			return err_count;
 		}
@@ -95,7 +95,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		if (msg_tmp) {
 			err_count = kstrtouint(msg_tmp, 10, &tmp_speed_frac);
 			if (err_count) {
-				kfree(msg_tmp);
+				kfree(speed_match);
 
 				return err_count;
 			}
@@ -105,7 +105,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		time_speed_int  = tmp_speed_int;
 		time_speed_frac = tmp_speed_frac;
 
-		kfree(msg_tmp);
+		kfree(speed_match);
 
 		return len;
 	} else {
