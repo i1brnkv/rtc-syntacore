@@ -17,8 +17,8 @@ static struct timespec time_stamp;
 static struct proc_dir_entry *proc_dir = NULL;
 /* file in /proc to store time speed */
 static struct proc_dir_entry *proc_spd = NULL;
-/* time speed coeffitient
- * Since floating in kernel is BAD, store coeffitient multiplied
+/* time speed coefficient
+ * Since floating in kernel is BAD, store coefficient multiplied
  * by 1000000, last 6 digits will be fractional part. */
 static unsigned long int time_mega_speed = 1000000;
 static char msg[80] = { 0 };
@@ -42,7 +42,7 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 	int msg_len = snprintf(msg, sizeof(msg), "%lu.%06lu\n",
 			time_mega_speed / 1000000, time_mega_speed % 1000000);
 	if ((msg_len + 1) > sizeof(msg)) {
-		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coeffitient of length %d\n",
+		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coefficient of length %d\n",
 				sizeof(msg), msg_len);
 
 		return -EFAULT;
@@ -99,7 +99,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		msg_tail = strchrnul(msg_tmp, '\n');
 		*msg_tail = '\0';
 
-		/* allocate string for result coeffitient times 1000000 */
+		/* allocate string for result coefficient times 1000000 */
 		mega_speed = kzalloc(strlen(msg) + 7, GFP_KERNEL);
 		if (!mega_speed) {
 			kfree(msg_tmp);
@@ -136,7 +136,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		time_stamp.tv_sec = syntacore_gettimeofday();
 		getrawmonotonic(&start_time);
 
-		/* update time speed coeffitient */
+		/* update time speed coefficient */
 		time_mega_speed = tmp_mega_speed;
 
 		kfree(speed_match);
