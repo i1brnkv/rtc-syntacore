@@ -15,10 +15,9 @@ static struct proc_dir_entry *proc_dir = NULL;
 /* file in /proc to store time speed */
 static struct proc_dir_entry *proc_spd = NULL;
 /* time speed coeffitient */
-/* since floating in kernel is BAD, split coeffitient into integer part and */
-/* fractional part (6 digits) */
-static unsigned int time_speed_int = 1;
-static unsigned int time_speed_frac = 0;
+/* since floating in kernel is BAD, store coeffitient times 1000000,
+ * last 6 digits will be fractional part */
+static unsigned long int time_mega_speed = 1000000;
 static char msg[80] = { 0 };
 
 static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
@@ -26,8 +25,8 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 {
 	int err_count = 0;
 
-	int msg_len = snprintf(msg, sizeof(msg), "%u.%u\n", time_speed_int,
-							  time_speed_frac);
+	int msg_len = snprintf(msg, sizeof(msg), "%lu.%06lu\n",
+			time_mega_speed / 1000000, time_mega_speed % 1000000);
 	if ((msg_len + 1) > sizeof(msg)) {
 		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coeffitient of length %d\n",
 				sizeof(msg), msg_len);
@@ -63,9 +62,9 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			      loff_t *offset)
 {
-	int err_count = 0;
-	char *msg_tmp, *speed_match;
-	int tmp_speed_int = 0, tmp_speed_frac = 0;
+	int i, err_count = 0;
+	char *msg_tmp, *msg_tail, *mega_speed, *speed_match;
+	unsigned long int tmp_mega_speed = 0;
 
 	/* clear msg before writing to it */
 	memset(msg, 0, sizeof(msg));
@@ -82,30 +81,47 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			return -ENOMEM;
 		strcpy(msg_tmp, msg);
 
-		speed_match = strsep(&msg_tmp, ".");
-		err_count = kstrtouint(speed_match, 10, &tmp_speed_int);
-		if (err_count) {
-			kfree(speed_match);
+		/* delete trailing '\n', it ruins everything */
+		msg_tail = strchrnul(msg_tmp, '\n');
+		*msg_tail = '\0';
 
-			return err_count;
+		/* allocate string for result coeffitient times 1000000 */
+		mega_speed = kzalloc(strlen(msg) + 7, GFP_KERNEL);
+		if (!mega_speed) {
+			kfree(msg_tmp);
+
+			return -ENOMEM;
 		}
+
+		/* search for '.' */
+		speed_match = strsep(&msg_tmp, ".");
+		strcat(mega_speed, speed_match);
 
 		/* if strsep() above finds ".", msg_tmp will point to fractional
 		 * part, otherwise NULL */
 		if (msg_tmp) {
-			err_count = kstrtouint(msg_tmp, 10, &tmp_speed_frac);
-			if (err_count) {
-				kfree(speed_match);
-
-				return err_count;
+			if (strlen(msg_tmp) > 6)
+				strncat(mega_speed, msg_tmp, 6);
+			else {
+				strcat(mega_speed, msg_tmp);
+				for (i = 0; i < (6 - strlen(msg_tmp)); i++)
+					strcat(mega_speed, "0");
 			}
-		}
+		} else
+			strcat(mega_speed, "000000");
 
+		err_count = kstrtoul(mega_speed, 10, &tmp_mega_speed);
+		if (err_count) {
+			kfree(speed_match);
+			kfree(mega_speed);
+
+			return err_count;
+		}
 		/* update time speed coeffitient */
-		time_speed_int  = tmp_speed_int;
-		time_speed_frac = tmp_speed_frac;
+		time_mega_speed = tmp_mega_speed;
 
 		kfree(speed_match);
+		kfree(mega_speed);
 
 		return len;
 	} else {
