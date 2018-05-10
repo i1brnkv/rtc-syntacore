@@ -9,7 +9,10 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivan Bornyakov");
 
 static struct platform_device *pdev = NULL;
-static long int time_offset = 0;
+/* start time to calculate seconds passed since last time update */
+static struct timespec start_time;
+/* time stamp to be updated on set_time, module probe and time speed chenge */
+static struct timespec time_stamp;
 /* directory in /proc */
 static struct proc_dir_entry *proc_dir = NULL;
 /* file in /proc to store time speed */
@@ -19,6 +22,17 @@ static struct proc_dir_entry *proc_spd = NULL;
  * by 1000000, last 6 digits will be fractional part. */
 static unsigned long int time_mega_speed = 1000000;
 static char msg[80] = { 0 };
+
+static unsigned long syntacore_gettimeofday(void) {
+	struct timespec now, time_left;
+	unsigned long res;
+
+	getrawmonotonic(&now);
+	time_left = timespec_sub(now, start_time);
+	res = time_stamp.tv_sec + time_left.tv_sec * time_mega_speed / 1000000;
+
+	return res;
+}
 
 static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 			     loff_t *offset)
@@ -117,6 +131,11 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 
 			return err_count;
 		}
+
+		/* update start_time and time_stamp to avoid time tearing  */
+		time_stamp.tv_sec = syntacore_gettimeofday();
+		getrawmonotonic(&start_time);
+
 		/* update time speed coeffitient */
 		time_mega_speed = tmp_mega_speed;
 
@@ -139,20 +158,19 @@ static struct file_operations spd_proc_fops = {
 
 static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 {
-	struct timeval now;
-
-	do_gettimeofday(&now);
-	rtc_time_to_tm(now.tv_sec + time_offset, tm);
+	unsigned long cur_time = syntacore_gettimeofday();
+	rtc_time_to_tm(cur_time, tm);
 
 	return rtc_valid_tm(tm);
 }
 
 static int syntacore_set_time(struct device *dev, struct rtc_time *tm)
 {
-	struct timeval now;
+	unsigned long t;
 
-	do_gettimeofday(&now);
-	time_offset = rtc_tm_to_time64(tm) - now.tv_sec;
+	rtc_tm_to_time(tm, &t);
+	time_stamp.tv_sec = t;
+	getrawmonotonic(&start_time);
 
 	return 0;
 }
@@ -224,6 +242,9 @@ static int __init syntacore_init(void)
 
 		return err;
 	}
+
+	getnstimeofday(&time_stamp);
+	getrawmonotonic(&start_time);
 
 	return 0;
 }
