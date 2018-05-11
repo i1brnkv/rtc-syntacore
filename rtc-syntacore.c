@@ -20,7 +20,7 @@ static struct proc_dir_entry *proc_spd = NULL;
 /* time speed coefficient
  * Since floating in kernel is BAD, store coefficient multiplied
  * by 1000000, last 6 digits will be fractional part. */
-static unsigned long int time_mega_speed = 1000000;
+static unsigned int time_mega_speed = 1000000;
 static char msg[80] = { 0 };
 
 static unsigned long syntacore_gettimeofday(void) {
@@ -39,7 +39,7 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 {
 	int err_count = 0;
 
-	int msg_len = snprintf(msg, sizeof(msg), "%lu.%06lu\n",
+	int msg_len = snprintf(msg, sizeof(msg), "%u.%06u\n",
 			time_mega_speed / 1000000, time_mega_speed % 1000000);
 	if ((msg_len + 1) > sizeof(msg)) {
 		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coefficient of length %d\n",
@@ -76,7 +76,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 {
 	int i, ret, err_count = 0;
 	char *msg_tmp, *msg_tail, *mega_speed, *speed_match;
-	unsigned long int tmp_mega_speed = 0;
+	unsigned int tmp_mega_speed = 0;
 
 	/* clear msg before writing to it */
 	memset(msg, 0, sizeof(msg));
@@ -126,7 +126,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	} else
 		strcat(mega_speed, "000000");
 
-	ret = kstrtoul(mega_speed, 10, &tmp_mega_speed);
+	ret = kstrtouint(mega_speed, 10, &tmp_mega_speed);
 	if (ret)
 		goto out;
 
