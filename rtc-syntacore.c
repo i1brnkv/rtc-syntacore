@@ -58,25 +58,23 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 		len = msg_len - *offset;
 
 	err_count = copy_to_user(buff, msg + *offset, len);
-	if (err_count == 0) {
-		/* update reading position */
-		*offset += len;
-
-		return len;
-	} else {
+	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
 
 		return -EFAULT;
 	}
 
-	return 0;
+	/* update reading position */
+	*offset += len;
+
+	return len;
 }
 
 static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			      loff_t *offset)
 {
-	int i, err_count = 0;
+	int i, ret, err_count = 0;
 	char *msg_tmp, *msg_tail, *mega_speed, *speed_match;
 	unsigned long int tmp_mega_speed = 0;
 
@@ -88,67 +86,67 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		len = sizeof(msg) - 1;
 
 	err_count = copy_from_user(msg, buff, len);
-	if (err_count == 0) {
-		/* copy msg string to use strsep() on it */
-		msg_tmp = kzalloc(strlen(msg) + 1, GFP_KERNEL);
-		if (!msg_tmp)
-			return -ENOMEM;
-		strcpy(msg_tmp, msg);
-
-		/* delete trailing '\n', it ruins everything */
-		msg_tail = strchrnul(msg_tmp, '\n');
-		*msg_tail = '\0';
-
-		/* allocate string for result coefficient times 1000000 */
-		mega_speed = kzalloc(strlen(msg) + 7, GFP_KERNEL);
-		if (!mega_speed) {
-			kfree(msg_tmp);
-
-			return -ENOMEM;
-		}
-
-		/* search for '.' */
-		speed_match = strsep(&msg_tmp, ".");
-		strcat(mega_speed, speed_match);
-
-		/* if strsep() above finds ".", msg_tmp will point to
-		 * fractional part, otherwise NULL */
-		if (msg_tmp) {
-			if (strlen(msg_tmp) > 6)
-				strncat(mega_speed, msg_tmp, 6);
-			else {
-				strcat(mega_speed, msg_tmp);
-				for (i = 0; i < (6 - strlen(msg_tmp)); i++)
-					strcat(mega_speed, "0");
-			}
-		} else
-			strcat(mega_speed, "000000");
-
-		err_count = kstrtoul(mega_speed, 10, &tmp_mega_speed);
-		if (err_count) {
-			kfree(speed_match);
-			kfree(mega_speed);
-
-			return err_count;
-		}
-
-		/* update start_time and time_stamp to avoid time tearing  */
-		time_stamp.tv_sec = syntacore_gettimeofday();
-		getrawmonotonic(&start_time);
-
-		/* update time speed coefficient */
-		time_mega_speed = tmp_mega_speed;
-
-		kfree(speed_match);
-		kfree(mega_speed);
-
-		return len;
-	} else {
+	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
 
 		return -EFAULT;
+
 	}
+
+	/* copy msg string to use strsep() on it */
+	msg_tmp = kzalloc(strlen(msg) + 1, GFP_KERNEL);
+	if (!msg_tmp)
+		goto nomem0;
+	strcpy(msg_tmp, msg);
+
+	/* delete trailing '\n', it ruins everything */
+	msg_tail = strchrnul(msg_tmp, '\n');
+	*msg_tail = '\0';
+
+	/* allocate string for result coefficient times 1000000 */
+	mega_speed = kzalloc(strlen(msg) + 7, GFP_KERNEL);
+	if (!mega_speed)
+		goto nomem1;
+
+	/* search for '.' */
+	speed_match = strsep(&msg_tmp, ".");
+	strcat(mega_speed, speed_match);
+
+	/* if strsep() above finds ".", msg_tmp will point to
+	 * fractional part, otherwise NULL */
+	if (msg_tmp) {
+		if (strlen(msg_tmp) > 6)
+			strncat(mega_speed, msg_tmp, 6);
+		else {
+			strcat(mega_speed, msg_tmp);
+			for (i = 0; i < (6 - strlen(msg_tmp)); i++)
+				strcat(mega_speed, "0");
+		}
+	} else
+		strcat(mega_speed, "000000");
+
+	ret = kstrtoul(mega_speed, 10, &tmp_mega_speed);
+	if (ret)
+		goto out;
+
+	/* update start_time and time_stamp to avoid time tearing  */
+	time_stamp.tv_sec = syntacore_gettimeofday();
+	getrawmonotonic(&start_time);
+
+	/* update time speed coefficient */
+	time_mega_speed = tmp_mega_speed;
+
+	ret = len;
+out:
+	kfree(speed_match);
+	kfree(mega_speed);
+
+	return ret;
+nomem1:
+	kfree(msg_tmp);
+nomem0:
+	return -ENOMEM;
 }
 
 static struct file_operations spd_proc_fops = {
@@ -214,39 +212,46 @@ static int __init syntacore_init(void)
 	int err;
 
 	proc_dir = proc_mkdir("rtc-syntacode", NULL);
-	if (proc_dir == NULL)
-		return -ENOMEM;
+	if (proc_dir == NULL) {
+		err = -ENOMEM;
+		goto err_proc_dir;
+	}
 
 	proc_spd = proc_create("speed", 0, proc_dir, &spd_proc_fops);
 	if (proc_spd == NULL) {
-		proc_remove(proc_dir);
-
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto err_proc_spd;
 	}
 
 	err = platform_driver_register(&syntacore_driver);
 	if (err)
-		return err;
+		goto err_plat_drv;
 
 	pdev = platform_device_alloc("rtc-syntacore", 0);
 	if (pdev == NULL) {
-		platform_driver_unregister(&syntacore_driver);
-
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto err_plat_dev_alloc;
 	}
 
 	err = platform_device_add(pdev);
-	if (err) {
-		platform_device_put(pdev);
-		platform_driver_unregister(&syntacore_driver);
-
-		return err;
-	}
+	if (err)
+		goto err_plat_dev_add;
 
 	getnstimeofday(&time_stamp);
 	getrawmonotonic(&start_time);
 
 	return 0;
+
+err_plat_dev_add:
+	platform_device_put(pdev);
+err_plat_dev_alloc:
+	platform_driver_unregister(&syntacore_driver);
+err_plat_drv:
+	proc_remove(proc_spd);
+err_proc_spd:
+	proc_remove(proc_dir);
+err_proc_dir:
+	return err;
 }
 
 static void __exit syntacore_exit(void)
