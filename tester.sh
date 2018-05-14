@@ -6,6 +6,8 @@ RC='\e[1;31m'
 GC='\e[1;32m'
 NC='\e[0m'
 
+DEV=`dmesg | grep rtc-syntacore | grep -o "rtc[0-9]\+" | tail -1`
+
 build_test()
 {
 	echo -e " ${GC}*${NC} trying to build module"
@@ -22,6 +24,14 @@ insmod_test()
 	echo -e " ${GC}*${NC} trying to insert module "
 	insmod ./src/rtc-syntacore.ko
 	[ -n "`lsmod | grep rtc_syntacore`" ]
+	echo -e " ${GC}OK${NC}"
+	echo
+}
+
+hwclock_get_test()
+{
+	echo -e " ${GC}*${NC} trying to get time with \"hwclock -r -f /dev/${DEV}\""
+	hwclock -r -f /dev/${DEV}
 	echo -e " ${GC}OK${NC}"
 	echo
 }
@@ -52,3 +62,4 @@ trap cleanup EXIT
 cd `dirname $0`
 build_test
 insmod_test
+hwclock_get_test
