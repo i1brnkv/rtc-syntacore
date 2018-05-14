@@ -211,7 +211,7 @@ static int __init syntacore_init(void)
 {
 	int err;
 
-	proc_dir = proc_mkdir("rtc-syntacode", NULL);
+	proc_dir = proc_mkdir("rtc-syntacore", NULL);
 	if (proc_dir == NULL) {
 		err = -ENOMEM;
 		goto err_proc_dir;
