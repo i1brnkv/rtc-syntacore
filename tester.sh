@@ -62,6 +62,25 @@ hwclock_set_test()
 	echo
 }
 
+slow_speed_test()
+{
+	echo -e " ${GC}*${NC} trying to set time speed to 0.6"
+	echo 0.6 > /proc/rtc-syntacore/speed
+	typeset -i T1=`cat /sys/class/rtc/${DEV}/since_epoch`
+	for i in `seq 10`
+	do
+		echo -n "$(( 11 - ${i} ))..."
+		sleep 1
+	done
+	typeset -i T2=`cat /sys/class/rtc/${DEV}/since_epoch`
+	TDIF=$(( ${T2} - ${T1} ))
+	echo
+	echo "in 10 real seconds left ${TDIF} seconds"
+	[ ${TDIF} -eq 6 ]
+	echo -e " ${GC}OK${NC}"
+	echo
+}
+
 cleanup()
 {
 	if [ $? -ne 0 ]
@@ -91,3 +110,4 @@ insmod_test
 hwclock_get_test
 timevalid_test
 hwclock_set_test
+slow_speed_test
