@@ -6,7 +6,7 @@ RC='\e[1;31m'
 GC='\e[1;32m'
 NC='\e[0m'
 
-DEV=`dmesg | grep rtc-syntacore | grep -o "rtc[0-9]\+" | tail -1`
+DEV="NA"
 
 build_test()
 {
@@ -26,6 +26,7 @@ insmod_test()
 	[ -n "`lsmod | grep rtc_syntacore`" ]
 	echo -e " ${GC}OK${NC}"
 	echo
+	DEV=`dmesg | grep rtc-syntacore | grep -o "rtc[0-9]\+" | tail -1`
 }
 
 hwclock_get_test()
