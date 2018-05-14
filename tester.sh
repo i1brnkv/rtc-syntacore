@@ -51,6 +51,17 @@ timevalid_test()
 	echo
 }
 
+hwclock_set_test()
+{
+	echo -e " ${GC}*${NC} trying to set date to 1970-01-02 with hwclock"
+	hwclock -f /dev/${DEV} --set --date="1970-01-02"
+	echo -n "new time is "; hwclock -r -f /dev/${DEV}
+	DATE=`hwclock -r -f /dev/${DEV} | cut -f 1 -d ' '`
+	[ "${DATE}" = "1970-01-02" ]
+	echo -e " ${GC}OK${NC}"
+	echo
+}
+
 cleanup()
 {
 	if [ $? -ne 0 ]
@@ -79,3 +90,4 @@ build_test
 insmod_test
 hwclock_get_test
 timevalid_test
+hwclock_set_test
