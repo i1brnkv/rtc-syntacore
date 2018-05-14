@@ -36,6 +36,20 @@ hwclock_get_test()
 	echo
 }
 
+timevalid_test()
+{
+	echo -e " ${GC}*${NC} comparing with system time"
+	typeset -i T1=`cat /sys/class/rtc/rtc0/since_epoch`
+	echo "/sys/class/rtc/rtc0/since_epoch ${T1} (system)"
+	typeset -i T2=`cat /sys/class/rtc/${DEV}/since_epoch`
+	echo "/sys/class/rtc/${DEV}/since_epoch ${T2} (our)"
+	TDIF=$(( ${T1} - ${T2} ))
+	[ ${TDIF} -ge -1 ]
+	[ ${TDIF} -le 1 ]
+	echo -e " ${GC}OK${NC}"
+	echo
+}
+
 cleanup()
 {
 	if [ $? -ne 0 ]
@@ -63,3 +77,4 @@ cd `dirname $0`
 build_test
 insmod_test
 hwclock_get_test
+timevalid_test
