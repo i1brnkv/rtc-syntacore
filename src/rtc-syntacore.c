@@ -17,6 +17,8 @@ static struct timespec time_stamp;
 static struct proc_dir_entry *proc_dir = NULL;
 /* file in /proc to store time speed */
 static struct proc_dir_entry *proc_spd = NULL;
+/* file in /proc to store random time speed flag */
+static struct proc_dir_entry *proc_rand = NULL;
 /* time speed coefficient
  * Since floating in kernel is BAD, store coefficient multiplied
  * by 1000000, last 6 digits will be fractional part. */
@@ -154,6 +156,23 @@ static struct file_operations spd_proc_fops = {
 	.write = proc_write_spd,
 };
 
+static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
+			      loff_t *offset)
+{
+	return 0;
+}
+
+static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
+			       loff_t *offset)
+{
+	return len;
+}
+
+static struct file_operations rand_proc_fops = {
+	.read  = proc_read_rand,
+	.write = proc_write_rand,
+};
+
 static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 {
 	unsigned long cur_time = syntacore_gettimeofday();
@@ -223,6 +242,12 @@ static int __init syntacore_init(void)
 		goto err_proc_spd;
 	}
 
+	proc_rand = proc_create("rand", 0, proc_dir, &rand_proc_fops);
+	if (proc_rand == NULL) {
+		err = -ENOMEM;
+		goto err_proc_rand;
+	}
+
 	err = platform_driver_register(&syntacore_driver);
 	if (err)
 		goto err_plat_drv;
@@ -247,6 +272,8 @@ err_plat_dev_add:
 err_plat_dev_alloc:
 	platform_driver_unregister(&syntacore_driver);
 err_plat_drv:
+	proc_remove(proc_rand);
+err_proc_rand:
 	proc_remove(proc_spd);
 err_proc_spd:
 	proc_remove(proc_dir);
@@ -258,6 +285,7 @@ static void __exit syntacore_exit(void)
 {
 	platform_device_unregister(pdev);
 	platform_driver_unregister(&syntacore_driver);
+	proc_remove(proc_rand);
 	proc_remove(proc_spd);
 	proc_remove(proc_dir);
 }
