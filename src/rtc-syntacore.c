@@ -194,6 +194,34 @@ static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 			       loff_t *offset)
 {
+	int err_count = 0;
+
+	/* clear msg before writing to it */
+	memset(msg, 0, sizeof(msg));
+
+	/* support writing max 2 symbols: '0' or '1' plus '\n' */
+	if (len > 2)
+		len = 2;
+
+	err_count = copy_from_user(msg, buff, len);
+	if (err_count) {
+		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars from user",
+				err_count);
+
+		return -EFAULT;
+	}
+
+	switch (msg[0]) {
+	case '1':
+		is_spd_rand = true;
+		break;
+	case '0':
+		is_spd_rand = false;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	return len;
 }
 
