@@ -101,6 +101,53 @@ fast_speed_test()
 
 }
 
+rand_speed_test()
+{
+	echo -e " ${GC}*${NC} trying to set time speed to random from 0 to 9.9"
+
+	echo 1 > /proc/rtc-syntacore/rand
+	echo 9.9 > /proc/rtc-syntacore/speed
+
+	typeset -i T1=`cat /sys/class/rtc/${DEV}/since_epoch`
+
+	for i in `seq 10`
+	do
+		echo -n "$(( 11 - ${i} ))..."
+		sleep 1
+	done
+
+	typeset -i T2=`cat /sys/class/rtc/${DEV}/since_epoch`
+	TDIF1=$(( ${T2} - ${T1} ))
+
+	echo
+	echo "in 10 real seconds left ${TDIF1} seconds"
+
+	[ ${TDIF1} -ge 0 ]
+	[ ${TDIF1} -le 99 ]
+
+	typeset -i T1=`cat /sys/class/rtc/${DEV}/since_epoch`
+
+	for i in `seq 10`
+	do
+		echo -n "$(( 11 - ${i} ))..."
+		sleep 1
+	done
+
+	typeset -i T2=`cat /sys/class/rtc/${DEV}/since_epoch`
+	TDIF2=$(( ${T2} - ${T1} ))
+
+	echo
+	echo "in 10 real seconds left ${TDIF2} seconds"
+
+	[ ${TDIF2} -ge 0 ]
+	[ ${TDIF2} -le 99 ]
+	[ ${TDIF1} -ne ${TDIF2} ]
+
+	echo -e " ${GC}OK${NC}"
+	echo
+
+}
+
 cleanup()
 {
 	if [ $? -ne 0 ]
@@ -132,3 +179,4 @@ timevalid_test
 hwclock_set_test
 slow_speed_test
 fast_speed_test
+rand_speed_test
