@@ -23,6 +23,8 @@ static struct proc_dir_entry *proc_rand = NULL;
  * Since floating in kernel is BAD, store coefficient multiplied
  * by 1000000, last 6 digits will be fractional part. */
 static unsigned int time_mega_speed = 1000000;
+/* time speed is random flag */
+static bool is_spd_rand = false;
 static char msg[80] = { 0 };
 
 static unsigned long syntacore_gettimeofday(void) {
@@ -159,7 +161,34 @@ static struct file_operations spd_proc_fops = {
 static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 			      loff_t *offset)
 {
-	return 0;
+	int err_count = 0;
+
+	if (is_spd_rand)
+		strcpy(msg, "1\n");
+	else
+		strcpy(msg, "0\n");
+
+	/* reading position is behind the end of string to show */
+	if (*offset >= 2)
+		return 0;
+
+	/* reading position is good, but overall length stands
+	 * outside the end of string to show, so truncate the length */
+	if (*offset + len > 2)
+		len = 2 - *offset;
+
+	err_count = copy_to_user(buff, msg + *offset, len);
+	if (err_count) {
+		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
+				err_count);
+
+		return -EFAULT;
+	}
+
+	/* update reading position */
+	*offset += len;
+
+	return len;
 }
 
 static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
