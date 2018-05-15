@@ -4,6 +4,7 @@
 #include <linux/platform_device.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
+#include <linux/random.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivan Bornyakov");
@@ -23,6 +24,9 @@ static struct proc_dir_entry *proc_rand = NULL;
  * Since floating in kernel is BAD, store coefficient multiplied
  * by 1000000, last 6 digits will be fractional part. */
 static unsigned int time_mega_speed = 1000000;
+/* random time speed coefficient
+ * Same, as above, but random from 0 to time_mega_speed. */
+static unsigned int time_mega_speed_rand = 1000000;
 /* time speed is random flag */
 static bool is_spd_rand = false;
 static char msg[80] = { 0 };
@@ -33,9 +37,24 @@ static unsigned long syntacore_gettimeofday(void) {
 
 	getrawmonotonic(&now);
 	time_left = timespec_sub(now, start_time);
-	res = time_stamp.tv_sec + time_left.tv_sec * time_mega_speed / 1000000;
+	if (is_spd_rand) {
+		res = time_stamp.tv_sec +
+		      time_left.tv_sec * time_mega_speed_rand / 1000000;
+	} else
+		res = time_stamp.tv_sec +
+		      time_left.tv_sec * time_mega_speed / 1000000;
 
 	return res;
+}
+
+static void syntacore_upd_rand_speed(void) {
+	/* update start_time and time_stamp to avoid time tearing  */
+	time_stamp.tv_sec = syntacore_gettimeofday();
+	getrawmonotonic(&start_time);
+
+	/* update time speed coefficient */
+	get_random_bytes(&time_mega_speed_rand, sizeof(unsigned int));
+	time_mega_speed_rand %= time_mega_speed;
 }
 
 static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
@@ -141,6 +160,10 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	/* update time speed coefficient */
 	time_mega_speed = tmp_mega_speed;
 
+	/* update random time speed coefficient */
+	if (is_spd_rand)
+		syntacore_upd_rand_speed();
+
 	ret = len;
 out:
 	kfree(speed_match);
@@ -213,6 +236,8 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 
 	switch (msg[0]) {
 	case '1':
+		if (!is_spd_rand)
+			syntacore_upd_rand_speed();
 		is_spd_rand = true;
 		break;
 	case '0':
@@ -234,6 +259,10 @@ static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 {
 	unsigned long cur_time = syntacore_gettimeofday();
 	rtc_time_to_tm(cur_time, tm);
+
+	/* update random time speed coefficient on every read */
+	if (is_spd_rand)
+		syntacore_upd_rand_speed();
 
 	return rtc_valid_tm(tm);
 }
