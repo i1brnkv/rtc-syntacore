@@ -37,10 +37,11 @@ static unsigned long syntacore_gettimeofday(void) {
 
 	getrawmonotonic(&now);
 	time_left = timespec_sub(now, start_time);
-	if (is_spd_rand) {
+
+	if (is_spd_rand)
 		res = time_stamp.tv_sec +
 		      time_left.tv_sec * time_mega_speed_rand / 1000000;
-	} else
+	else
 		res = time_stamp.tv_sec +
 		      time_left.tv_sec * time_mega_speed / 1000000;
 
@@ -59,16 +60,18 @@ static void __set_speed(unsigned int *dst, const unsigned int speed) {
 static void syntacore_set_speed(unsigned int speed) {
 	unsigned int speed_rand;
 
-	/* update random time speed will not hurt */
-	if (speed) {
-		get_random_bytes(&speed_rand, sizeof(unsigned int));
-		speed_rand %= speed;
-	} else
-		speed_rand = 0;
-
 	__set_speed(&time_mega_speed, speed);
 
-	time_mega_speed_rand = speed_rand;
+	/* also update random time speed */
+	if (is_spd_rand) {
+		if (speed) {
+			get_random_bytes(&speed_rand, sizeof(unsigned int));
+			speed_rand %= speed;
+		} else
+			speed_rand = 0;
+
+		time_mega_speed_rand = speed_rand;
+	}
 }
 
 static void syntacore_set_speed_rand(void) {
@@ -165,7 +168,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	/* if strsep() above finds ".", msg_tmp will point to
 	 * fractional part, otherwise NULL */
 	if (msg_tmp) {
-		if (strlen(msg_tmp) > 6)
+		if (strlen(msg_tmp) >= 6)
 			strncat(mega_speed, msg_tmp, 6);
 		else {
 			strcat(mega_speed, msg_tmp);
@@ -276,6 +279,7 @@ static struct file_operations rand_proc_fops = {
 static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 {
 	unsigned long cur_time = syntacore_gettimeofday();
+
 	rtc_time_to_tm(cur_time, tm);
 
 	/* update random time speed coefficient on every read */
