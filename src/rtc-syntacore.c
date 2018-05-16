@@ -47,14 +47,40 @@ static unsigned long syntacore_gettimeofday(void) {
 	return res;
 }
 
-static void syntacore_upd_rand_speed(void) {
+static void __set_speed(unsigned int *dst, const unsigned int speed) {
 	/* update start_time and time_stamp to avoid time tearing  */
 	time_stamp.tv_sec = syntacore_gettimeofday();
 	getrawmonotonic(&start_time);
 
 	/* update time speed coefficient */
-	get_random_bytes(&time_mega_speed_rand, sizeof(unsigned int));
-	time_mega_speed_rand %= time_mega_speed;
+	*dst = speed;
+}
+
+static void syntacore_set_speed(unsigned int speed) {
+	unsigned int speed_rand;
+
+	/* update random time speed will not hurt */
+	if (speed) {
+		get_random_bytes(&speed_rand, sizeof(unsigned int));
+		speed_rand %= speed;
+	} else
+		speed_rand = 0;
+
+	__set_speed(&time_mega_speed, speed);
+
+	time_mega_speed_rand = speed_rand;
+}
+
+static void syntacore_set_speed_rand(void) {
+	unsigned int speed_rand;
+
+	if (time_mega_speed) {
+		get_random_bytes(&speed_rand, sizeof(unsigned int));
+		speed_rand %= time_mega_speed;
+	} else
+		speed_rand = 0;
+
+	__set_speed(&time_mega_speed_rand, speed_rand);
 }
 
 static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
@@ -153,16 +179,8 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	if (ret)
 		goto out;
 
-	/* update start_time and time_stamp to avoid time tearing  */
-	time_stamp.tv_sec = syntacore_gettimeofday();
-	getrawmonotonic(&start_time);
-
 	/* update time speed coefficient */
-	time_mega_speed = tmp_mega_speed;
-
-	/* update random time speed coefficient */
-	if (is_spd_rand)
-		syntacore_upd_rand_speed();
+	syntacore_set_speed(tmp_mega_speed);
 
 	ret = len;
 out:
@@ -237,7 +255,7 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 	switch (msg[0]) {
 	case '1':
 		if (!is_spd_rand)
-			syntacore_upd_rand_speed();
+			syntacore_set_speed_rand();
 		is_spd_rand = true;
 		break;
 	case '0':
@@ -262,7 +280,7 @@ static int syntacore_read_time(struct device *dev, struct rtc_time *tm)
 
 	/* update random time speed coefficient on every read */
 	if (is_spd_rand)
-		syntacore_upd_rand_speed();
+		syntacore_set_speed_rand();
 
 	return rtc_valid_tm(tm);
 }
