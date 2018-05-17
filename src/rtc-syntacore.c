@@ -29,7 +29,8 @@ static unsigned int time_mega_speed = 1000000;
 static unsigned int time_mega_speed_rand = 1000000;
 /* time speed is random flag */
 static bool is_spd_rand = false;
-static char msg[80] = { 0 };
+
+#define MAX_BUFF_SIZE 80
 
 static unsigned long syntacore_gettimeofday(void) {
 	struct timespec now, time_left;
@@ -89,20 +90,25 @@ static void syntacore_set_speed_rand(void) {
 static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 			     loff_t *offset)
 {
-	int err_count = 0;
+	int ret, err_count = 0;
+	char *msg;
 
-	int msg_len = snprintf(msg, sizeof(msg), "%u.%06u\n",
-			time_mega_speed / 1000000, time_mega_speed % 1000000);
-	if ((msg_len + 1) > sizeof(msg)) {
-		printk(KERN_ERR "SYNTACORE RTC buffer(%ld) is too small to store coefficient of length %d\n",
-				sizeof(msg), msg_len);
-
-		return -EFAULT;
+	int msg_len = snprintf(NULL, 0, "%u.%06u\n", time_mega_speed / 1000000,
+						     time_mega_speed % 1000000);
+	msg = kzalloc(msg_len + 1, GFP_KERNEL);
+	if (msg == NULL) {
+		ret = -ENOMEM;
+		goto out;
 	}
 
+	snprintf(msg, msg_len + 1, "%u.%06u\n", time_mega_speed / 1000000,
+						time_mega_speed % 1000000);
+
 	/* reading position is behind the end of string to show */
-	if (*offset >= msg_len)
-		return 0;
+	if (*offset >= msg_len) {
+		ret = 0;
+		goto out;
+	}
 
 	/* reading position is good, but overall length stands
 	 * outside the end of string to show, so truncate the length */
@@ -113,43 +119,53 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
-
-		return -EFAULT;
+		ret = -EFAULT;
+		goto out;
 	}
 
 	/* update reading position */
 	*offset += len;
 
-	return len;
+	ret = len;
+out:
+	kfree(msg);
+
+	return ret;
 }
 
 static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			      loff_t *offset)
 {
 	int i, ret, err_count = 0;
-	char *msg_tmp, *msg_tail, *mega_speed, *speed_match;
+	char *msg, *msg_tmp, *msg_tail, *mega_speed, *speed_match;
 	unsigned int tmp_mega_speed = 0;
 
-	/* clear msg before writing to it */
-	memset(msg, 0, sizeof(msg));
+	size_t msg_len = min_t(size_t, len, MAX_BUFF_SIZE);
+
+	msg = kzalloc(msg_len + 1, GFP_KERNEL);
+	if (msg == NULL) {
+		ret = -ENOMEM;
+		goto out0;
+	}
 
 	/* if user wants to write insane length, truncate it */
-	if (len > (sizeof(msg) - 1))
-		len = sizeof(msg) - 1;
+	if (len > msg_len)
+		len = msg_len;
 
 	err_count = copy_from_user(msg, buff, len);
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
-
-		return -EFAULT;
-
+		ret = -EFAULT;
+		goto out1;
 	}
 
 	/* copy msg string to use strsep() on it */
 	msg_tmp = kzalloc(strlen(msg) + 1, GFP_KERNEL);
-	if (!msg_tmp)
-		goto nomem0;
+	if (!msg_tmp) {
+		ret = -ENOMEM;
+		goto out1;
+	}
 	strcpy(msg_tmp, msg);
 
 	/* delete trailing '\n', it ruins everything */
@@ -158,8 +174,10 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 
 	/* allocate string for result coefficient times 1000000 */
 	mega_speed = kzalloc(strlen(msg) + 7, GFP_KERNEL);
-	if (!mega_speed)
-		goto nomem1;
+	if (!mega_speed) {
+		ret = -ENOMEM;
+		goto out2;
+	}
 
 	/* search for '.' */
 	speed_match = strsep(&msg_tmp, ".");
@@ -180,21 +198,22 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 
 	ret = kstrtouint(mega_speed, 10, &tmp_mega_speed);
 	if (ret)
-		goto out;
+		goto out3;
 
 	/* update time speed coefficient */
 	syntacore_set_speed(tmp_mega_speed);
 
 	ret = len;
-out:
+out3:
 	kfree(speed_match);
 	kfree(mega_speed);
-
-	return ret;
-nomem1:
+	goto out1;
+out2:
 	kfree(msg_tmp);
-nomem0:
-	return -ENOMEM;
+out1:
+	kfree(msg);
+out0:
+	return ret;
 }
 
 static struct file_operations spd_proc_fops = {
@@ -205,7 +224,14 @@ static struct file_operations spd_proc_fops = {
 static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 			      loff_t *offset)
 {
-	int err_count = 0;
+	int ret, err_count = 0;
+	char *msg;
+
+	msg = kzalloc(3, GFP_KERNEL);
+	if (msg == NULL) {
+		ret = -ENOMEM;
+		goto out0;
+	}
 
 	if (is_spd_rand)
 		strcpy(msg, "1\n");
@@ -213,8 +239,10 @@ static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 		strcpy(msg, "0\n");
 
 	/* reading position is behind the end of string to show */
-	if (*offset >= 2)
-		return 0;
+	if (*offset >= 2) {
+		ret = 0;
+		goto out;
+	}
 
 	/* reading position is good, but overall length stands
 	 * outside the end of string to show, so truncate the length */
@@ -225,23 +253,31 @@ static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
-
-		return -EFAULT;
+		ret = -EFAULT;
+		goto out;
 	}
 
 	/* update reading position */
 	*offset += len;
 
-	return len;
+	ret = len;
+out:
+	kfree(msg);
+out0:
+	return ret;
 }
 
 static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 			       loff_t *offset)
 {
-	int err_count = 0;
+	int ret, err_count = 0;
+	char *msg;
 
-	/* clear msg before writing to it */
-	memset(msg, 0, sizeof(msg));
+	msg = kzalloc(3, GFP_KERNEL);
+	if (msg == NULL) {
+		ret = -ENOMEM;
+		goto out0;
+	}
 
 	/* support writing max 2 symbols: '0' or '1' plus '\n' */
 	if (len > 2)
@@ -251,9 +287,11 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars from user",
 				err_count);
-
-		return -EFAULT;
+		ret = -EFAULT;
+		goto out;
 	}
+
+	ret = len;
 
 	switch (msg[0]) {
 	case '1':
@@ -265,10 +303,13 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 		is_spd_rand = false;
 		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
 
-	return len;
+out:
+	kfree(msg);
+out0:
+	return ret;
 }
 
 static struct file_operations rand_proc_fops = {
