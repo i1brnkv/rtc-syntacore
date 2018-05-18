@@ -137,7 +137,7 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 			      loff_t *offset)
 {
 	int i, ret, err_count = 0;
-	char *msg, *msg_tmp, *msg_tail, *mega_speed, *speed_match;
+	char *msg, *msg_tail, *mega_speed, *speed_match;
 	unsigned int tmp_mega_speed = 0;
 
 	size_t msg_len = min_t(size_t, len, MAX_BUFF_SIZE);
@@ -148,11 +148,8 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		goto out0;
 	}
 
-	/* if user wants to write insane length, truncate it */
-	if (len > msg_len)
-		len = msg_len;
-
-	err_count = copy_from_user(msg, buff, len);
+	/* copy from user only sane amount of data */
+	err_count = copy_from_user(msg, buff, msg_len);
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
@@ -160,37 +157,30 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 		goto out1;
 	}
 
-	/* copy msg string to use strsep() on it */
-	msg_tmp = kzalloc(strlen(msg) + 1, GFP_KERNEL);
-	if (!msg_tmp) {
-		ret = -ENOMEM;
-		goto out1;
-	}
-	strcpy(msg_tmp, msg);
-
 	/* delete trailing '\n', it ruins everything */
-	msg_tail = strchrnul(msg_tmp, '\n');
+	msg_tail = strchrnul(msg, '\n');
 	*msg_tail = '\0';
 
 	/* allocate string for result coefficient times 1000000 */
 	mega_speed = kzalloc(strlen(msg) + 7, GFP_KERNEL);
 	if (!mega_speed) {
 		ret = -ENOMEM;
-		goto out2;
+		goto out1;
 	}
 
-	/* search for '.' */
-	speed_match = strsep(&msg_tmp, ".");
+	/* search for '.'
+	 * after this, speed_match will be a pointer to original msg */
+	speed_match = strsep(&msg, ".");
 	strcat(mega_speed, speed_match);
 
-	/* if strsep() above finds ".", msg_tmp will point to
+	/* if strsep() above finds ".", msg will point to
 	 * fractional part, otherwise NULL */
-	if (msg_tmp) {
-		if (strlen(msg_tmp) >= 6)
-			strncat(mega_speed, msg_tmp, 6);
+	if (msg) {
+		if (strlen(msg) >= 6)
+			strncat(mega_speed, msg, 6);
 		else {
-			strcat(mega_speed, msg_tmp);
-			for (i = 0; i < (6 - strlen(msg_tmp)); i++)
+			strcat(mega_speed, msg);
+			for (i = 0; i < (6 - strlen(msg)); i++)
 				strcat(mega_speed, "0");
 		}
 	} else
@@ -203,13 +193,14 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	/* update time speed coefficient */
 	syntacore_set_speed(tmp_mega_speed);
 
+	/* fool user and tell that all data was written,
+	 * even if it has insane length */
 	ret = len;
 out3:
 	kfree(speed_match);
 	kfree(mega_speed);
-	goto out1;
-out2:
-	kfree(msg_tmp);
+
+	return ret;
 out1:
 	kfree(msg);
 out0:
@@ -224,14 +215,8 @@ static struct file_operations spd_proc_fops = {
 static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 			      loff_t *offset)
 {
-	int ret, err_count = 0;
-	char *msg;
-
-	msg = kzalloc(3, GFP_KERNEL);
-	if (msg == NULL) {
-		ret = -ENOMEM;
-		goto out0;
-	}
+	int err_count = 0;
+	char msg[3] = { 0 };
 
 	if (is_spd_rand)
 		strcpy(msg, "1\n");
@@ -239,10 +224,8 @@ static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 		strcpy(msg, "0\n");
 
 	/* reading position is behind the end of string to show */
-	if (*offset >= 2) {
-		ret = 0;
-		goto out;
-	}
+	if (*offset >= 2)
+		return 0;
 
 	/* reading position is good, but overall length stands
 	 * outside the end of string to show, so truncate the length */
@@ -253,45 +236,35 @@ static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars to user\n",
 				err_count);
-		ret = -EFAULT;
-		goto out;
+
+		return -EFAULT;
 	}
 
 	/* update reading position */
 	*offset += len;
 
-	ret = len;
-out:
-	kfree(msg);
-out0:
-	return ret;
+	return len;
 }
 
 static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 			       loff_t *offset)
 {
-	int ret, err_count = 0;
-	char *msg;
-
-	msg = kzalloc(3, GFP_KERNEL);
-	if (msg == NULL) {
-		ret = -ENOMEM;
-		goto out0;
-	}
+	int msg_len, err_count = 0;
+	char msg[3] = { 0 };
 
 	/* support writing max 2 symbols: '0' or '1' plus '\n' */
 	if (len > 2)
-		len = 2;
+		msg_len = 2;
+	else
+		msg_len = len;
 
-	err_count = copy_from_user(msg, buff, len);
+	err_count = copy_from_user(msg, buff, msg_len);
 	if (err_count) {
 		printk(KERN_ERR "SYNTACORE RTC failed to copy %d chars from user",
 				err_count);
-		ret = -EFAULT;
-		goto out;
-	}
 
-	ret = len;
+		return -EFAULT;
+	}
 
 	switch (msg[0]) {
 	case '1':
@@ -303,13 +276,12 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 		is_spd_rand = false;
 		break;
 	default:
-		ret = -EINVAL;
+		return -EINVAL;
 	}
 
-out:
-	kfree(msg);
-out0:
-	return ret;
+	/* fool user and tell that all data was written,
+	 * even if it has insane length */
+	return len;
 }
 
 static struct file_operations rand_proc_fops = {
