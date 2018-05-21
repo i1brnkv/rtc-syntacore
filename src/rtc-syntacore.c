@@ -22,17 +22,20 @@ static struct proc_dir_entry *proc_spd;
 static struct proc_dir_entry *proc_rand;
 /* time speed coefficient
  * Since floating in kernel is BAD, store coefficient multiplied
- * by 1000000, last 6 digits will be fractional part. */
+ * by 1000000, last 6 digits will be fractional part.
+ */
 static unsigned int time_mega_speed = 1000000;
 /* random time speed coefficient
- * Same, as above, but random from 0 to time_mega_speed. */
+ * Same, as above, but random from 0 to time_mega_speed.
+ */
 static unsigned int time_mega_speed_rand = 1000000;
 /* time speed is random flag */
 static bool is_spd_rand;
 
 #define MAX_BUFF_SIZE 80
 
-static unsigned long syntacore_gettimeofday(void) {
+static unsigned long syntacore_gettimeofday(void)
+{
 	struct timespec now, time_left;
 	unsigned long res;
 
@@ -49,7 +52,8 @@ static unsigned long syntacore_gettimeofday(void) {
 	return res;
 }
 
-static void __set_speed(unsigned int *dst, const unsigned int speed) {
+static void __set_speed(unsigned int *dst, const unsigned int speed)
+{
 	/* update start_time and time_stamp to avoid time tearing  */
 	time_stamp.tv_sec = syntacore_gettimeofday();
 	getrawmonotonic(&start_time);
@@ -58,7 +62,8 @@ static void __set_speed(unsigned int *dst, const unsigned int speed) {
 	*dst = speed;
 }
 
-static void syntacore_set_speed(unsigned int speed) {
+static void syntacore_set_speed(unsigned int speed)
+{
 	unsigned int speed_rand;
 
 	__set_speed(&time_mega_speed, speed);
@@ -75,7 +80,8 @@ static void syntacore_set_speed(unsigned int speed) {
 	}
 }
 
-static void syntacore_set_speed_rand(void) {
+static void syntacore_set_speed_rand(void)
+{
 	unsigned int speed_rand;
 
 	if (time_mega_speed) {
@@ -111,7 +117,8 @@ static ssize_t proc_read_spd(struct file *filep, char *buff, size_t len,
 	}
 
 	/* reading position is good, but overall length stands
-	 * outside the end of string to show, so truncate the length */
+	 * outside the end of string to show, so truncate the length
+	 */
 	if (*offset + len > msg_len)
 		len = msg_len - *offset;
 
@@ -169,12 +176,14 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	}
 
 	/* search for '.'
-	 * after this, speed_match will be a pointer to original msg */
+	 * after this, speed_match will be a pointer to original msg
+	 */
 	speed_match = strsep(&msg, ".");
 	strcat(mega_speed, speed_match);
 
 	/* if strsep() above finds ".", msg will point to
-	 * fractional part, otherwise NULL */
+	 * fractional part, otherwise NULL
+	 */
 	if (msg) {
 		if (strlen(msg) >= 6)
 			strncat(mega_speed, msg, 6);
@@ -194,7 +203,8 @@ static ssize_t proc_write_spd(struct file *filep, const char *buff, size_t len,
 	syntacore_set_speed(tmp_mega_speed);
 
 	/* fool user and tell that all data was written,
-	 * even if it has insane length */
+	 * even if it has insane length
+	 */
 	ret = len;
 out3:
 	kfree(speed_match);
@@ -228,7 +238,8 @@ static ssize_t proc_read_rand(struct file *filep, char *buff, size_t len,
 		return 0;
 
 	/* reading position is good, but overall length stands
-	 * outside the end of string to show, so truncate the length */
+	 * outside the end of string to show, so truncate the length
+	 */
 	if (*offset + len > 2)
 		len = 2 - *offset;
 
@@ -280,7 +291,8 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 	}
 
 	/* fool user and tell that all data was written,
-	 * even if it has insane length */
+	 * even if it has insane length
+	 */
 	return len;
 }
 
