@@ -207,7 +207,7 @@ out0:
 	return ret;
 }
 
-static struct file_operations spd_proc_fops = {
+static const struct file_operations spd_proc_fops = {
 	.read  = proc_read_spd,
 	.write = proc_write_spd,
 };
@@ -284,7 +284,7 @@ static ssize_t proc_write_rand(struct file *filep, const char *buff, size_t len,
 	return len;
 }
 
-static struct file_operations rand_proc_fops = {
+static const struct file_operations rand_proc_fops = {
 	.read  = proc_read_rand,
 	.write = proc_write_rand,
 };
