@@ -9,17 +9,17 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivan Bornyakov");
 
-static struct platform_device *pdev = NULL;
+static struct platform_device *pdev;
 /* start time to calculate seconds passed since last time update */
 static struct timespec start_time;
 /* time stamp to be updated on set_time, module probe and time speed chenge */
 static struct timespec time_stamp;
 /* directory in /proc */
-static struct proc_dir_entry *proc_dir = NULL;
+static struct proc_dir_entry *proc_dir;
 /* file in /proc to store time speed */
-static struct proc_dir_entry *proc_spd = NULL;
+static struct proc_dir_entry *proc_spd;
 /* file in /proc to store random time speed flag */
-static struct proc_dir_entry *proc_rand = NULL;
+static struct proc_dir_entry *proc_rand;
 /* time speed coefficient
  * Since floating in kernel is BAD, store coefficient multiplied
  * by 1000000, last 6 digits will be fractional part. */
@@ -28,7 +28,7 @@ static unsigned int time_mega_speed = 1000000;
  * Same, as above, but random from 0 to time_mega_speed. */
 static unsigned int time_mega_speed_rand = 1000000;
 /* time speed is random flag */
-static bool is_spd_rand = false;
+static bool is_spd_rand;
 
 #define MAX_BUFF_SIZE 80
 
