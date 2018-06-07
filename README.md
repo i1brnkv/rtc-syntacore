@@ -11,3 +11,15 @@ It supports :
  * Random mode. If 1 is set in /proc/rtc-syntacore/rand, time speed coefficient
    updates on every time reading to random number from 0 to value from
    /proc/rtc-syntacore/speed.
+
+---
+
+###### note for future researchers
+
+<sup>
+This was a solution for the trial task for embedded software intern position at
+Syntacore https://syntacore.com/page/company/careers. I didn't recieve any
+feedback about the code (either I didn't get a job, obviously), so I couldn't
+tell you how bad the code is. I'll just leave it here for a reference, cause it
+seems that no one gives a fu. Task itself is in trial_task_sw.pdf.
+</sup>
