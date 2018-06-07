@@ -10,10 +10,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivan Bornyakov");
 
 static struct platform_device *pdev;
-/* start time to calculate seconds passed since last time update */
-static struct timespec start_time;
-/* time stamp to be updated on set_time, module probe and time speed chenge */
-static struct timespec time_stamp;
 /* directory in /proc */
 static struct proc_dir_entry *proc_dir;
 /* file in /proc to store time speed */
@@ -31,6 +27,11 @@ static unsigned int time_mega_speed = 1000000;
 static unsigned int time_mega_speed_rand = 1000000;
 /* time speed is random flag */
 static bool is_spd_rand;
+/* time stamp to be updated on set_time, module probe and time speed chenge */
+static struct time_stamp {
+	unsigned long int ts_wall;
+	struct timespec   ts_mono;
+} time_stamp;
 
 #define MAX_BUFF_SIZE 80
 
@@ -40,13 +41,13 @@ static unsigned long syntacore_gettimeofday(void)
 	unsigned long res;
 
 	getrawmonotonic(&now);
-	time_left = timespec_sub(now, start_time);
+	time_left = timespec_sub(now, time_stamp.ts_mono);
 
 	if (is_spd_rand)
-		res = time_stamp.tv_sec +
+		res = time_stamp.ts_wall +
 		      time_left.tv_sec * time_mega_speed_rand / 1000000;
 	else
-		res = time_stamp.tv_sec +
+		res = time_stamp.ts_wall +
 		      time_left.tv_sec * time_mega_speed / 1000000;
 
 	return res;
@@ -55,8 +56,8 @@ static unsigned long syntacore_gettimeofday(void)
 static void __set_speed(unsigned int *dst, const unsigned int speed)
 {
 	/* update start_time and time_stamp to avoid time tearing  */
-	time_stamp.tv_sec = syntacore_gettimeofday();
-	getrawmonotonic(&start_time);
+	time_stamp.ts_wall = syntacore_gettimeofday();
+	getrawmonotonic(&time_stamp.ts_mono);
 
 	/* update time speed coefficient */
 	*dst = speed;
@@ -319,8 +320,8 @@ static int syntacore_set_time(struct device *dev, struct rtc_time *tm)
 	unsigned long t;
 
 	rtc_tm_to_time(tm, &t);
-	time_stamp.tv_sec = t;
-	getrawmonotonic(&start_time);
+	time_stamp.ts_wall = t;
+	getrawmonotonic(&time_stamp.ts_mono);
 
 	return 0;
 }
@@ -362,6 +363,7 @@ static struct platform_driver syntacore_driver = {
 static int __init syntacore_init(void)
 {
 	int err;
+	struct timespec start;
 
 	proc_dir = proc_mkdir("rtc-syntacore", NULL);
 	if (proc_dir == NULL) {
@@ -395,8 +397,9 @@ static int __init syntacore_init(void)
 	if (err)
 		goto err_plat_dev_add;
 
-	getnstimeofday(&time_stamp);
-	getrawmonotonic(&start_time);
+	getnstimeofday(&start);
+	time_stamp.ts_wall = start.tv_sec;
+	getrawmonotonic(&time_stamp.ts_mono);
 
 	return 0;
 
