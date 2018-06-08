@@ -12,6 +12,9 @@ It supports :
    updates on every time reading to random number from 0 to value from
    /proc/rtc-syntacore/speed.
 
+Script ./tester.sh will build this module and test functionality (and clean up
+after itself). Run it with 'sudo'.
+
 ---
 
 ###### note for future researchers
